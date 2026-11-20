@@ -1,69 +1,67 @@
-import Image from "next/image";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { getProfile, signPaths } from "@/lib/data";
+import { Header } from "@/components/Header";
+import { LevelPath } from "@/components/LevelPath";
 
-export default function Home() {
+const tilts = ["-1.6deg", "1.2deg", "-0.8deg", "1.8deg"];
+
+export default async function Home() {
+  const supabase = await createClient();
+  const [profile, { data: sections }, { data: levels }] = await Promise.all([
+    getProfile(),
+    supabase.from("sections").select("*").order("position"),
+    supabase.from("levels").select("name").order("position"),
+  ]);
+  const url = await signPaths(sections?.map((s) => s.cover_url) ?? []);
+  const first = profile?.name?.trim().split(" ")[0];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+    <>
+      <Header />
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
+        <p className="font-hand text-3xl sm:text-4xl">Hello{first ? `, ${first}` : ""}! 👋</p>
+        <p className="mt-1 max-w-prose text-ink-soft">
+          Aprende inglés con lo que ya te gusta. Elige tu nivel o entra a una sección.
+        </p>
+
+        <div className="mt-10 grid gap-10 lg:grid-cols-[13rem_1fr]">
+          <aside className="space-y-8">
+            <div className="note max-w-[13rem] p-4 text-2xl leading-tight">always updating…</div>
+            <LevelPath levels={levels?.map((l) => l.name) ?? []} />
+          </aside>
+
+          <section>
+            <h2 className="text-2xl"><span className="marker">Material</span></h2>
+            {!sections?.length ? (
+              <p className="mt-6 text-ink-soft">
+                Todavía no hay material. Tu profesora lo irá subiendo pronto.
+              </p>
+            ) : (
+              <ul className="mt-8 grid gap-x-8 gap-y-10 sm:grid-cols-2">
+                {sections.map((s, i) => {
+                  const cover = url(s.cover_url);
+                  return (
+                    <li key={s.id}>
+                      <Link href={`/sections/${s.id}`} className="block">
+                        <div className="polaroid" style={{ "--tilt": tilts[i % tilts.length] } as React.CSSProperties}>
+                          <div className="aspect-[4/3] overflow-hidden bg-sky">
+                            {cover && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={cover} alt="" className="h-full w-full object-cover" />
+                            )}
+                          </div>
+                          <p className="mt-2 text-center font-hand text-3xl leading-none">{s.title}</p>
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
         </div>
       </main>
-    </div>
+    </>
   );
 }

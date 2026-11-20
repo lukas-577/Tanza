@@ -1,0 +1,123 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { signPaths } from "@/lib/data";
+import { createItem, deleteItem, togglePublished, updateSection } from "../../actions";
+
+const field = "mt-1 w-full rounded-md border border-line bg-white px-3 py-2";
+
+export default async function AdminSection({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const [{ data: section }, { data: items }, { data: levels }, { data: genres }] = await Promise.all([
+    supabase.from("sections").select("*").eq("id", id).single(),
+    supabase.from("items").select("id,title,published").eq("section_id", id).order("created_at", { ascending: false }),
+    supabase.from("levels").select("*").order("position"),
+    supabase.from("genres").select("*").order("name"),
+  ]);
+  if (!section) notFound();
+  const cover = (await signPaths([section.cover_url]))(section.cover_url);
+
+  return (
+    <div className="space-y-10">
+      <div>
+        <Link href="/admin" className="text-sm text-ink-soft hover:text-ink">← Secciones</Link>
+        <h2 className="mt-2 text-3xl">{section.title}</h2>
+      </div>
+
+      <form action={updateSection} className="space-y-3 rounded-lg border border-line p-4">
+        <h3 className="text-lg">Editar sección</h3>
+        <input type="hidden" name="id" value={id} />
+        <label className="block text-sm text-ink-soft">Título
+          <input name="title" required defaultValue={section.title} className={field} />
+        </label>
+        <label className="block text-sm text-ink-soft">Orden en la página principal (0 aparece primero)
+          <input name="position" type="number" min={0} defaultValue={section.position} className={field} />
+        </label>
+        <div className="flex items-end gap-4">
+          {cover && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={cover} alt="Portada actual" className="h-20 w-28 rounded object-cover" />
+          )}
+          <label className="block flex-1 text-sm text-ink-soft">
+            {cover ? "Cambiar portada" : "Añadir portada"}
+            <input name="cover" type="file" accept="image/*" className={field} />
+          </label>
+        </div>
+        <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Guardar cambios</button>
+      </form>
+
+      <ul className="divide-y divide-line">
+        {items?.map((it) => (
+          <li key={it.id} className="flex items-center justify-between gap-3 py-3">
+            <Link href={`/items/${it.id}`} className="font-medium hover:underline">{it.title}</Link>
+            <span className="flex items-center gap-4 text-sm">
+              <form action={togglePublished}>
+                <input type="hidden" name="id" value={it.id} />
+                <input type="hidden" name="published" value={String(it.published)} />
+                <button className="hover:underline">{it.published ? "Ocultar" : "Publicar"}</button>
+              </form>
+              <form action={deleteItem}>
+                <input type="hidden" name="id" value={it.id} />
+                <button className="text-red-700 hover:underline">Eliminar</button>
+              </form>
+              <span className={it.published ? "text-ink-soft" : "text-amber-700"}>
+                {it.published ? "Publicado" : "Borrador"}
+              </span>
+            </span>
+          </li>
+        ))}
+        {!items?.length && <li className="py-3 text-ink-soft">Esta sección está vacía. Añade el primer ítem abajo.</li>}
+      </ul>
+
+      <form action={createItem} className="space-y-4 rounded-lg border border-line p-4">
+        <h3 className="text-lg">Nuevo ítem</h3>
+        <input type="hidden" name="section_id" value={id} />
+        <label className="block text-sm text-ink-soft">Título
+          <input name="title" required className={field} />
+        </label>
+        <label className="block text-sm text-ink-soft">Texto
+          <textarea name="body" rows={5} className={field} />
+        </label>
+
+        <fieldset>
+          <legend className="text-sm text-ink-soft">Niveles</legend>
+          <div className="mt-1 flex flex-wrap gap-3">
+            {levels?.map((l) => (
+              <label key={l.id} className="flex items-center gap-1.5">
+                <input type="checkbox" name="levels" value={l.id} /> {l.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {!!genres?.length && (
+          <fieldset>
+            <legend className="text-sm text-ink-soft">Géneros</legend>
+            <div className="mt-1 flex flex-wrap gap-3">
+              {genres.map((g) => (
+                <label key={g.id} className="flex items-center gap-1.5">
+                  <input type="checkbox" name="genres" value={g.id} /> {g.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+
+        <label className="block text-sm text-ink-soft">Enlaces (uno por línea: Nombre | https://…)
+          <textarea name="links" rows={3} className={field} />
+        </label>
+        <label className="block text-sm text-ink-soft">Portada
+          <input name="cover" type="file" accept="image/*" className={field} />
+        </label>
+        <label className="block text-sm text-ink-soft">Archivos (PDF o imágenes)
+          <input name="files" type="file" multiple accept="application/pdf,image/*" className={field} />
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" name="published" defaultChecked /> Publicar ahora
+        </label>
+        <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Crear ítem</button>
+      </form>
+    </div>
+  );
+}
