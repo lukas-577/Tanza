@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/SubmitButton";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -57,7 +58,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
             <input type="checkbox" name="remove_cover" /> Quitar la portada (la sección se mostrará como lista)
           </label>
         )}
-        <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Guardar cambios</button>
+        <SubmitButton className="rounded-md bg-ink px-4 py-2 font-medium text-white">Guardar cambios</SubmitButton>
       </form>
 
       <section className="space-y-3 rounded-lg border border-line p-4">
@@ -75,7 +76,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
                 <form action={removeDecoration}>
                   <input type="hidden" name="id" value={id} />
                   <input type="hidden" name="path" value={path} />
-                  <button className="text-sm text-red-700 hover:underline">Quitar</button>
+                  <SubmitButton className="text-sm text-red-700 hover:underline">Quitar</SubmitButton>
                 </form>
               </li>
             ))}
@@ -86,7 +87,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
           <label className="block flex-1 text-sm text-ink-soft">Añadir imágenes
             <input name="files" type="file" multiple required accept="image/*" className={field} />
           </label>
-          <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Subir</button>
+          <SubmitButton className="rounded-md bg-ink px-4 py-2 font-medium text-white">Subir</SubmitButton>
         </form>
       </section>
 
@@ -100,12 +101,12 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
                   <input type="hidden" name="id" value={it.id} />
                   <input type="hidden" name="section_id" value={id} />
                   <input type="hidden" name="dir" value={dir} />
-                  <button
+                  <SubmitButton
                     disabled={dir === "up" ? index === 0 : index === items.length - 1}
                     className="hover:underline disabled:opacity-30 disabled:no-underline"
                   >
                     {dir === "up" ? "Subir" : "Bajar"}
-                  </button>
+                  </SubmitButton>
                 </form>
               ))}
               <Link href={`/admin/items/${it.id}`} className="font-medium hover:underline">Editar</Link>
@@ -113,11 +114,11 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
               <form action={togglePublished}>
                 <input type="hidden" name="id" value={it.id} />
                 <input type="hidden" name="published" value={String(it.published)} />
-                <button className="hover:underline">{it.published ? "Ocultar" : "Publicar"}</button>
+                <SubmitButton className="hover:underline">{it.published ? "Ocultar" : "Publicar"}</SubmitButton>
               </form>
               <form action={deleteItem}>
                 <input type="hidden" name="id" value={it.id} />
-                <button className="text-red-700 hover:underline">Eliminar</button>
+                <SubmitButton className="text-red-700 hover:underline">Eliminar</SubmitButton>
               </form>
               <span className={it.published ? "text-ink-soft" : "text-amber-700"}>
                 {it.published ? "Publicado" : "Borrador"}
@@ -175,7 +176,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
         <label className="flex items-center gap-2">
           <input type="checkbox" name="published" defaultChecked /> Publicar ahora
         </label>
-        <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Crear ítem</button>
+        <SubmitButton className="rounded-md bg-ink px-4 py-2 font-medium text-white">Crear ítem</SubmitButton>
       </form>
     </div>
   );

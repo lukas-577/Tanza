@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SubmitButton } from "@/components/SubmitButton";
 import { authClient } from "@/lib/auth-client";
 
 export function EmailForm() {
@@ -40,10 +41,9 @@ export function EmailForm() {
           className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2" />
       </label>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <button disabled={pending}
-        className="w-full rounded-md bg-ink px-4 py-2 font-medium text-white disabled:opacity-60">
-        {pending ? "Entrando…" : "Entrar"}
-      </button>
+      <SubmitButton pending={pending} className="w-full rounded-md bg-ink px-4 py-2 font-medium text-white">
+        Entrar
+      </SubmitButton>
     </form>
   );
 }

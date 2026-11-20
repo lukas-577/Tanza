@@ -117,3 +117,29 @@ a:focus-visible > .polaroid {
   .sky { animation: none; }
   .polaroid { transition: none; }
 }
+
+/* Carga: el subrayador se dibuja de izquierda a derecha, como el resaltador sobre el cuaderno. */
+.marker-draw {
+  background: linear-gradient(var(--marker), var(--marker)) left bottom / 100% 0.45em no-repeat;
+  animation: marker-draw 1.4s cubic-bezier(0.5, 0, 0.2, 1) infinite;
+}
+@keyframes marker-draw {
+  0% { background-size: 0% 0.45em; }
+  70%, 100% { background-size: 100% 0.45em; }
+}
+
+/* Anillo de carga dentro de botones (hereda el color del texto). */
+.spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 9999px;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .marker-draw { animation: none; }
+  .spinner { animation-duration: 1.6s; }
+}

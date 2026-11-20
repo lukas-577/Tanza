@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/SubmitButton";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { toggleStudentActive, deleteStudent } from "../actions";
@@ -36,11 +37,11 @@ export default async function StudentsPage() {
               <form action={toggleStudentActive}>
                 <input type="hidden" name="id" value={s.id} />
                 <input type="hidden" name="active" value={String(s.active)} />
-                <button className="hover:underline">{s.active ? "Desactivar" : "Activar"}</button>
+                <SubmitButton className="hover:underline">{s.active ? "Desactivar" : "Activar"}</SubmitButton>
               </form>
               <form action={deleteStudent}>
                 <input type="hidden" name="id" value={s.id} />
-                <button className="text-red-700 hover:underline">Eliminar</button>
+                <SubmitButton className="text-red-700 hover:underline">Eliminar</SubmitButton>
               </form>
             </span>
           </li>

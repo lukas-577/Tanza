@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/SubmitButton";
 import Link from "next/link";
 import { getProfile } from "@/lib/data";
 import { signOut } from "@/app/login/actions";
@@ -20,7 +21,7 @@ export async function Header() {
               <Link href="/admin" className="hover:text-ink">Administrar</Link>
             )}
             <form action={signOut}>
-              <button className="hover:text-ink">Salir</button>
+              <SubmitButton className="hover:text-ink">Salir</SubmitButton>
             </form>
           </nav>
         </div>

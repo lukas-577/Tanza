@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { signPaths } from "@/lib/data";
 import { Header } from "@/components/Header";
+import { FilterLink } from "@/components/FilterLink";
 import { LevelChip, GenreChip } from "@/components/Chip";
 
 type Props = {
@@ -52,11 +53,11 @@ export default async function SectionPage({ params, searchParams }: Props) {
         <h2 className="mt-3 text-4xl"><span className="marker">{section.title}</span></h2>
 
         <div className="mt-8 flex flex-wrap items-center gap-2">
-          <Link href={q ? `?q=${q}` : "?"} className={pill(!nivel)}>Todos</Link>
+          <FilterLink href={q ? `?q=${q}` : "?"} className={pill(!nivel)}>Todos</FilterLink>
           {levels.map((l) => (
-            <Link key={l.id} href={`?nivel=${l.name}${q ? `&q=${q}` : ""}`} className={pill(nivel === l.name)}>
+            <FilterLink key={l.id} href={`?nivel=${l.name}${q ? `&q=${q}` : ""}`} className={pill(nivel === l.name)}>
               {l.name}
-            </Link>
+            </FilterLink>
           ))}
           <form className="ml-auto">
             {nivel && <input type="hidden" name="nivel" value={nivel} />}

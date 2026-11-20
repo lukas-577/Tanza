@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/SubmitButton";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { createSection, deleteSection, createGenre } from "./actions";
@@ -31,7 +32,7 @@ export default async function AdminHome() {
                 <Link href={`/admin/sections/${s.id}`} className="hover:underline">Editar</Link>
               <form action={deleteSection}>
                 <input type="hidden" name="id" value={s.id} />
-                <button className="text-red-700 hover:underline">Eliminar</button>
+                <SubmitButton className="text-red-700 hover:underline">Eliminar</SubmitButton>
               </form>
               </span>
             </li>
@@ -47,7 +48,7 @@ export default async function AdminHome() {
           <label className="block text-sm text-ink-soft">Portada (opcional: sin foto se muestra como lista)
             <input name="cover" type="file" accept="image/*" className={field} />
           </label>
-          <button className={primary}>Crear sección</button>
+          <SubmitButton className={primary}>Crear sección</SubmitButton>
         </form>
       </section>
 
@@ -62,7 +63,7 @@ export default async function AdminHome() {
         <form action={createGenre} className="mt-4 flex gap-2">
           <input name="name" required placeholder="Pop, Rock, Comedy…" aria-label="Nuevo género"
             className="rounded-md border border-line bg-white px-3 py-2" />
-          <button className={primary}>Añadir género</button>
+          <SubmitButton className={primary}>Añadir género</SubmitButton>
         </form>
       </section>
     </div>

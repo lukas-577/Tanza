@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/SubmitButton";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -52,7 +53,7 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
                 </a>
                 <form action={removeAttachment}>
                   <input type="hidden" name="id" value={a.id} />
-                  <button className="text-sm text-red-700 hover:underline">Quitar</button>
+                  <SubmitButton className="text-sm text-red-700 hover:underline">Quitar</SubmitButton>
                 </form>
               </li>
             ))}
@@ -124,7 +125,7 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
         </label>
 
         <div className="flex items-center gap-4">
-          <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Guardar cambios</button>
+          <SubmitButton className="rounded-md bg-ink px-4 py-2 font-medium text-white">Guardar cambios</SubmitButton>
           <Link href={`/admin/sections/${item.section.id}`} className="text-sm text-ink-soft hover:text-ink">
             Cancelar
           </Link>
