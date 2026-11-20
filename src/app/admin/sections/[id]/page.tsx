@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signPaths } from "@/lib/data";
-import { createItem, deleteItem, togglePublished, updateSection } from "../../actions";
+import {
+  createItem, deleteItem, togglePublished, updateSection, addDecorations, removeDecoration,
+} from "../../actions";
 
 const field = "mt-1 w-full rounded-md border border-line bg-white px-3 py-2";
 
@@ -16,7 +18,9 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
     supabase.from("genres").select("*").order("name"),
   ]);
   if (!section) notFound();
-  const cover = (await signPaths([section.cover_url]))(section.cover_url);
+  const decorations: string[] = section.decorations ?? [];
+  const sign = await signPaths([section.cover_url, ...decorations]);
+  const cover = sign(section.cover_url);
 
   return (
     <div className="space-y-10">
@@ -47,11 +51,42 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
         <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Guardar cambios</button>
       </form>
 
+      <section className="space-y-3 rounded-lg border border-line p-4">
+        <h3 className="text-lg">Imágenes decorativas</h3>
+        <p className="text-sm text-ink-soft">
+          Se muestran al lado de la lista de esta sección en la página principal. Funcionan mejor las imágenes
+          con fondo transparente (PNG).
+        </p>
+        {decorations.length > 0 && (
+          <ul className="flex flex-wrap gap-4">
+            {decorations.map((path) => (
+              <li key={path} className="space-y-1 text-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={sign(path) ?? ""} alt="" className="h-20 w-20 rounded border border-line bg-white object-contain" />
+                <form action={removeDecoration}>
+                  <input type="hidden" name="id" value={id} />
+                  <input type="hidden" name="path" value={path} />
+                  <button className="text-sm text-red-700 hover:underline">Quitar</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form action={addDecorations} className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="id" value={id} />
+          <label className="block flex-1 text-sm text-ink-soft">Añadir imágenes
+            <input name="files" type="file" multiple required accept="image/*" className={field} />
+          </label>
+          <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Subir</button>
+        </form>
+      </section>
+
       <ul className="divide-y divide-line">
         {items?.map((it) => (
           <li key={it.id} className="flex items-center justify-between gap-3 py-3">
             <Link href={`/items/${it.id}`} className="font-medium hover:underline">{it.title}</Link>
             <span className="flex items-center gap-4 text-sm">
+              <Link href={`/admin/whiteboard?item=${it.id}`} className="hover:underline">Pizarra</Link>
               <form action={togglePublished}>
                 <input type="hidden" name="id" value={it.id} />
                 <input type="hidden" name="published" value={String(it.published)} />

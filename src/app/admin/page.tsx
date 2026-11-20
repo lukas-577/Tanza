@@ -14,9 +14,14 @@ export default async function AdminHome() {
 
   return (
     <div className="space-y-12">
-      <Link href="/admin/students" className="inline-block rounded-md border border-line px-4 py-2 font-medium hover:bg-sky/30">
-        Gestionar alumnos
-      </Link>
+      <div className="flex flex-wrap gap-3">
+        <Link href="/admin/students" className="inline-block rounded-md border border-line px-4 py-2 font-medium hover:bg-sky/30">
+          Gestionar alumnos
+        </Link>
+        <Link href="/admin/whiteboard" className="inline-block rounded-md border border-line px-4 py-2 font-medium hover:bg-sky/30">
+          Pizarra
+        </Link>
+      </div>
       <section>
         <h2 className="text-2xl">Secciones</h2>
         <ul className="mt-4 divide-y divide-line">
@@ -40,7 +45,7 @@ export default async function AdminHome() {
           <label className="block text-sm text-ink-soft">Título
             <input name="title" required className={field} />
           </label>
-          <label className="block text-sm text-ink-soft">Portada
+          <label className="block text-sm text-ink-soft">Portada (opcional: sin foto se muestra como lista)
             <input name="cover" type="file" accept="image/*" className={field} />
           </label>
           <button className={primary}>Crear sección</button>

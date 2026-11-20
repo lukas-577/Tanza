@@ -60,6 +60,38 @@ export async function updateSection(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+export async function addDecorations(formData: FormData) {
+  const supabase = await requireAdmin();
+  const id = String(formData.get("id"));
+  const files = formData.getAll("files").filter(hasFile);
+  if (!files.length) return;
+
+  const { data: section, error: readError } = await supabase
+    .from("sections").select("decorations").eq("id", id).single();
+  if (readError) throw new Error(readError.message);
+
+  const added: string[] = [];
+  for (const f of files) added.push(await upload(supabase, f, "decorations"));
+
+  const { error } = await supabase
+    .from("sections")
+    .update({ decorations: [...(section?.decorations ?? []), ...added] })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
+}
+
+export async function removeDecoration(formData: FormData) {
+  const supabase = await requireAdmin();
+  const id = String(formData.get("id"));
+  const path = String(formData.get("path"));
+  const { data: section } = await supabase.from("sections").select("decorations").eq("id", id).single();
+  const rest = (section?.decorations ?? []).filter((p: string) => p !== path);
+  await supabase.from("sections").update({ decorations: rest }).eq("id", id);
+  if (path.startsWith("decorations/")) await supabase.storage.from("media").remove([path]);
+  revalidatePath("/", "layout");
+}
+
 export async function deleteSection(formData: FormData) {
   const supabase = await requireAdmin();
   await supabase.from("sections").delete().eq("id", String(formData.get("id")));
@@ -169,4 +201,19 @@ export async function deleteStudent(formData: FormData) {
   if (data?.role !== "student") return;
   await createAdminClient().auth.admin.deleteUser(id);
   revalidatePath("/admin/students");
+}
+
+// El navegador sube el PNG directo a Storage; aquí solo se registra en la base de datos.
+export async function saveWhiteboard(itemId: string, path: string, name: string) {
+  const supabase = await requireAdmin();
+  if (!path.startsWith("whiteboards/")) return { error: "Ruta de archivo no válida." };
+  const { error } = await supabase.from("attachments").insert({
+    item_id: itemId,
+    file_url: path,
+    name: name.trim() || "Pizarra",
+    type: "image",
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true as const };
 }
