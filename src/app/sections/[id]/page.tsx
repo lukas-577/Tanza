@@ -22,7 +22,7 @@ export default async function SectionPage({ params, searchParams }: Props) {
       .from("items")
       .select("id,title,item_levels(levels(id,name,position)),item_genres(genres(id,name))")
       .eq("section_id", id)
-      .order("created_at", { ascending: false }),
+      .order("position").order("created_at"),
   ]);
   if (!section) notFound();
   const cover = (await signPaths([section.cover_url]))(section.cover_url);

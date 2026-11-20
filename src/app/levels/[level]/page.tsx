@@ -14,7 +14,7 @@ export default async function LevelPage({ params }: { params: Promise<{ level: s
     .from("items")
     .select("id,title,sections(id,title,position),item_levels!inner(levels!inner(name)),item_genres(genres(id,name))")
     .eq("item_levels.levels.name", level)
-    .order("created_at", { ascending: false });
+    .order("position").order("created_at");
 
   const groups = new Map<string, { title: string; position: number; items: any[] }>();
   (items as any[] | null)?.forEach((it) => {

@@ -34,7 +34,7 @@ export default async function Home() {
           .from("items")
           .select("id,title,body,links,section_id,attachments(id)")
           .in("section_id", lists.map((s) => s.id))
-          .order("created_at", { ascending: true })
+          .order("position").order("created_at")
       : Promise.resolve({ data: [] as ListItem[] }),
   ]);
 

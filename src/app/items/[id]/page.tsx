@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signPaths } from "@/lib/data";
 import { linkLabel } from "@/lib/links";
+import { countGaps } from "@/lib/lyrics";
+import { GapFill } from "@/components/GapFill";
 import { Header } from "@/components/Header";
 import { LevelChip, GenreChip } from "@/components/Chip";
 
@@ -21,6 +23,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
   const url = await signPaths([item.cover_url, ...item.attachments.map((a: any) => a.file_url)]);
   const cover = url(item.cover_url);
   const links: { label: string; url: string }[] = item.links ?? [];
+  const vocabulary: { word: string; meaning: string; example: string }[] = item.vocabulary ?? [];
 
   return (
     <>
@@ -55,6 +58,33 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
                   {linkLabel(l.url, l.label)}
                 </a>
               ))}
+            </section>
+          )}
+
+          {vocabulary.length > 0 && (
+            <section className="mt-10">
+              <h3 className="font-hand text-3xl">Words to learn</h3>
+              <ul className="ruled mt-2 border-b border-rule">
+                {vocabulary.map((v, i) => (
+                  <li key={i} className="px-2 py-3">
+                    <p>
+                      <span className="font-serif text-lg font-semibold">{v.word}</span>
+                      {v.meaning && <span className="ml-3 text-ink-soft">{v.meaning}</span>}
+                    </p>
+                    {v.example && <p className="mt-0.5 italic text-ink-soft">“{v.example}”</p>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {countGaps(item.lyrics) > 0 && (
+            <section className="mt-10">
+              <h3 className="font-hand text-3xl">Fill in the gaps</h3>
+              <p className="mb-4 mt-1 text-ink-soft">
+                Escucha la canción y completa las palabras que faltan.
+              </p>
+              <GapFill lyrics={item.lyrics} />
             </section>
           )}
 

@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signPaths } from "@/lib/data";
 import {
-  createItem, deleteItem, togglePublished, updateSection, addDecorations, removeDecoration,
+  createItem, deleteItem, togglePublished, updateSection, addDecorations, removeDecoration, moveItem,
 } from "../../actions";
+import { ItemTeachingFields } from "../../ItemTeachingFields";
 
 const field = "mt-1 w-full rounded-md border border-line bg-white px-3 py-2";
 
@@ -13,7 +14,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
   const supabase = await createClient();
   const [{ data: section }, { data: items }, { data: levels }, { data: genres }] = await Promise.all([
     supabase.from("sections").select("*").eq("id", id).single(),
-    supabase.from("items").select("id,title,published").eq("section_id", id).order("created_at", { ascending: false }),
+    supabase.from("items").select("id,title,published").eq("section_id", id).order("position").order("created_at"),
     supabase.from("levels").select("*").order("position"),
     supabase.from("genres").select("*").order("name"),
   ]);
@@ -48,6 +49,11 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
             <input name="cover" type="file" accept="image/*" className={field} />
           </label>
         </div>
+        {cover && (
+          <label className="flex items-center gap-2 text-sm text-ink-soft">
+            <input type="checkbox" name="remove_cover" /> Quitar la portada (la sección se mostrará como lista)
+          </label>
+        )}
         <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Guardar cambios</button>
       </form>
 
@@ -82,10 +88,24 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
       </section>
 
       <ul className="divide-y divide-line">
-        {items?.map((it) => (
-          <li key={it.id} className="flex items-center justify-between gap-3 py-3">
+        {items?.map((it, index) => (
+          <li key={it.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <Link href={`/items/${it.id}`} className="font-medium hover:underline">{it.title}</Link>
-            <span className="flex items-center gap-4 text-sm">
+            <span className="flex flex-wrap items-center gap-4 text-sm">
+              {(["up", "down"] as const).map((dir) => (
+                <form key={dir} action={moveItem}>
+                  <input type="hidden" name="id" value={it.id} />
+                  <input type="hidden" name="section_id" value={id} />
+                  <input type="hidden" name="dir" value={dir} />
+                  <button
+                    disabled={dir === "up" ? index === 0 : index === items.length - 1}
+                    className="hover:underline disabled:opacity-30 disabled:no-underline"
+                  >
+                    {dir === "up" ? "Subir" : "Bajar"}
+                  </button>
+                </form>
+              ))}
+              <Link href={`/admin/items/${it.id}`} className="font-medium hover:underline">Editar</Link>
               <Link href={`/admin/whiteboard?item=${it.id}`} className="hover:underline">Pizarra</Link>
               <form action={togglePublished}>
                 <input type="hidden" name="id" value={it.id} />
@@ -142,6 +162,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
         <label className="block text-sm text-ink-soft">Enlaces (uno por línea: Nombre | https://…)
           <textarea name="links" rows={3} className={field} />
         </label>
+        <ItemTeachingFields />
         <label className="block text-sm text-ink-soft">Portada
           <input name="cover" type="file" accept="image/*" className={field} />
         </label>

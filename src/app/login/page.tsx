@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { signIn } from "./actions";
 import { HashSession } from "./HashSession";
 
@@ -32,6 +33,9 @@ export default function LoginPage() {
             {pending ? "Entrando…" : "Entrar"}
           </button>
         </form>
+        <p className="mt-6 text-sm">
+          <Link href="/login/forgot" className="text-ink-soft hover:text-ink">¿Olvidaste tu contraseña?</Link>
+        </p>
       </div>
     </main>
   );

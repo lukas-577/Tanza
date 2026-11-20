@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toggleStudentActive, deleteStudent } from "../actions";
 import { StudentForm } from "./StudentForm";
+import { ResetPasswordButton } from "./ResetPasswordButton";
 
 export default async function StudentsPage() {
   const supabase = await createClient();
@@ -29,10 +30,11 @@ export default async function StudentsPage() {
               <span className="font-medium">{s.name || email.get(s.id)}</span>
               {s.name && <span className="ml-2 text-sm text-ink-soft">{email.get(s.id)}</span>}
             </span>
-            <span className="flex items-center gap-4 text-sm">
+            <span className="flex flex-wrap items-center gap-4 text-sm">
               <span className={s.active ? "text-ink-soft" : "text-amber-700"}>
                 {s.active ? "Activo" : "Desactivado"}
               </span>
+              <ResetPasswordButton id={s.id} />
               <form action={toggleStudentActive}>
                 <input type="hidden" name="id" value={s.id} />
                 <input type="hidden" name="active" value={String(s.active)} />
