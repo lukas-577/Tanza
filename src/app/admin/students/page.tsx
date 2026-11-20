@@ -1,40 +1,38 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/db";
 import { toggleStudentActive, deleteStudent } from "../actions";
 import { StudentForm } from "./StudentForm";
-import { ResetPasswordButton } from "./ResetPasswordButton";
+import { ResetPasswordForm } from "./ResetPasswordForm";
 
 export default async function StudentsPage() {
-  const supabase = await createClient();
-  const { data: students } = await supabase
-    .from("profiles")
-    .select("id,name,active,created_at")
-    .eq("role", "student")
-    .order("created_at", { ascending: false });
-
-  const { data: users } = await createAdminClient().auth.admin.listUsers({ perPage: 1000 });
-  const email = new Map(users?.users.map((u) => [u.id, u.email]) ?? []);
+  const students = await prisma.user.findMany({
+    where: { role: "student" },
+    select: { id: true, name: true, email: true, active: true, _count: { select: { sessions: true } } },
+    orderBy: { createdAt: "desc" },
+  });
 
   return (
     <div className="space-y-10">
       <div>
         <Link href="/admin" className="text-sm text-ink-soft hover:text-ink">← Administrar</Link>
         <h2 className="mt-2 text-3xl">Alumnos</h2>
+        <p className="mt-1 text-ink-soft">
+          Agrega el Gmail de cada alumno y una contraseña inicial. Podrá entrar con ella o con “Continuar con Google”.
+        </p>
       </div>
 
       <ul className="divide-y divide-line">
-        {students?.map((s) => (
+        {students.map((s) => (
           <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <span>
-              <span className="font-medium">{s.name || email.get(s.id)}</span>
-              {s.name && <span className="ml-2 text-sm text-ink-soft">{email.get(s.id)}</span>}
+              <span className="font-medium">{s.name}</span>
+              <span className="ml-2 text-sm text-ink-soft">{s.email}</span>
             </span>
             <span className="flex flex-wrap items-center gap-4 text-sm">
               <span className={s.active ? "text-ink-soft" : "text-amber-700"}>
-                {s.active ? "Activo" : "Desactivado"}
+                {!s.active ? "Desactivado" : s._count.sessions ? "Activo" : "Aún no ha entrado"}
               </span>
-              <ResetPasswordButton id={s.id} />
+              <ResetPasswordForm id={s.id} />
               <form action={toggleStudentActive}>
                 <input type="hidden" name="id" value={s.id} />
                 <input type="hidden" name="active" value={String(s.active)} />
@@ -47,7 +45,7 @@ export default async function StudentsPage() {
             </span>
           </li>
         ))}
-        {!students?.length && <li className="py-3 text-ink-soft">Aún no hay alumnos. Crea el primero abajo.</li>}
+        {!students.length && <li className="py-3 text-ink-soft">Aún no hay alumnos. Agrega el primero abajo.</li>}
       </ul>
 
       <StudentForm />

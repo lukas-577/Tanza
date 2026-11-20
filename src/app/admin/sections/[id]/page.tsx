@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/db";
 import { signPaths } from "@/lib/data";
 import {
   createItem, deleteItem, togglePublished, updateSection, addDecorations, removeDecoration, moveItem,
@@ -11,17 +11,20 @@ const field = "mt-1 w-full rounded-md border border-line bg-white px-3 py-2";
 
 export default async function AdminSection({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const [{ data: section }, { data: items }, { data: levels }, { data: genres }] = await Promise.all([
-    supabase.from("sections").select("*").eq("id", id).single(),
-    supabase.from("items").select("id,title,published").eq("section_id", id).order("position").order("created_at"),
-    supabase.from("levels").select("*").order("position"),
-    supabase.from("genres").select("*").order("name"),
+  const [section, items, levels, genres] = await Promise.all([
+    prisma.section.findUnique({ where: { id } }),
+    prisma.item.findMany({
+      where: { sectionId: id },
+      select: { id: true, title: true, published: true },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    }),
+    prisma.level.findMany({ orderBy: { position: "asc" } }),
+    prisma.genre.findMany({ orderBy: { name: "asc" } }),
   ]);
   if (!section) notFound();
-  const decorations: string[] = section.decorations ?? [];
-  const sign = await signPaths([section.cover_url, ...decorations]);
-  const cover = sign(section.cover_url);
+  const decorations = section.decorations;
+  const sign = await signPaths([section.coverUrl, ...decorations]);
+  const cover = sign(section.coverUrl);
 
   return (
     <div className="space-y-10">
@@ -88,7 +91,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
       </section>
 
       <ul className="divide-y divide-line">
-        {items?.map((it, index) => (
+        {items.map((it, index) => (
           <li key={it.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <Link href={`/items/${it.id}`} className="font-medium hover:underline">{it.title}</Link>
             <span className="flex flex-wrap items-center gap-4 text-sm">
@@ -122,7 +125,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
             </span>
           </li>
         ))}
-        {!items?.length && <li className="py-3 text-ink-soft">Esta sección está vacía. Añade el primer ítem abajo.</li>}
+        {!items.length && <li className="py-3 text-ink-soft">Esta sección está vacía. Añade el primer ítem abajo.</li>}
       </ul>
 
       <form action={createItem} className="space-y-4 rounded-lg border border-line p-4">
@@ -138,7 +141,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
         <fieldset>
           <legend className="text-sm text-ink-soft">Niveles</legend>
           <div className="mt-1 flex flex-wrap gap-3">
-            {levels?.map((l) => (
+            {levels.map((l) => (
               <label key={l.id} className="flex items-center gap-1.5">
                 <input type="checkbox" name="levels" value={l.id} /> {l.name}
               </label>
@@ -146,7 +149,7 @@ export default async function AdminSection({ params }: { params: Promise<{ id: s
           </div>
         </fieldset>
 
-        {!!genres?.length && (
+        {!!genres.length && (
           <fieldset>
             <legend className="text-sm text-ink-soft">Géneros</legend>
             <div className="mt-1 flex flex-wrap gap-3">

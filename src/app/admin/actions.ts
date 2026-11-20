@@ -1,103 +1,81 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@/lib/data";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createPublicClient } from "@/lib/supabase/public";
-
-async function requireAdmin() {
-  const profile = await getProfile();
-  if (profile?.role !== "admin" || !profile.active) redirect("/");
-  return createClient();
-}
-
-async function upload(supabase: Awaited<ReturnType<typeof createClient>>, file: File, folder: string) {
-  const safe = file.name.replace(/[^\w.\-]+/g, "_");
-  const path = `${folder}/${randomUUID()}-${safe}`;
-  const { error } = await supabase.storage.from("media").upload(path, file, { contentType: file.type });
-  if (error) throw new Error(`No se pudo subir ${file.name}: ${error.message}`);
-  return path;
-}
+import { hashPassword } from "better-auth/crypto";
+import { prisma } from "@/lib/db";
+import { requireAdmin } from "@/lib/session";
+import { deleteFiles, uploadFile } from "@/lib/r2";
 
 const hasFile = (f: FormDataEntryValue | null): f is File => f instanceof File && f.size > 0;
+const upload = (file: File, folder: string) => uploadFile(file, folder, file.name);
+const attachmentType = (f: File) => (f.type === "application/pdf" ? "pdf" : "image");
 
 export async function createSection(formData: FormData) {
-  const supabase = await requireAdmin();
+  await requireAdmin();
   const cover = formData.get("cover");
-  const { count } = await supabase.from("sections").select("*", { count: "exact", head: true });
-  const { error } = await supabase.from("sections").insert({
-    title: String(formData.get("title")),
-    cover_url: hasFile(cover) ? await upload(supabase, cover, "covers") : null,
-    position: count ?? 0,
+  await prisma.section.create({
+    data: {
+      title: String(formData.get("title")),
+      coverUrl: hasFile(cover) ? await upload(cover, "covers") : null,
+      position: await prisma.section.count(),
+    },
   });
-  if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
 }
 
 export async function updateSection(formData: FormData) {
-  const supabase = await requireAdmin();
+  await requireAdmin();
   const id = String(formData.get("id"));
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
 
-  const update: { title: string; position?: number; cover_url?: string | null } = { title };
+  const data: { title: string; position?: number; coverUrl?: string | null } = { title };
   const position = Number(formData.get("position"));
-  if (Number.isFinite(position)) update.position = position;
+  if (Number.isFinite(position)) data.position = position;
 
   const cover = formData.get("cover");
-  const removeCover = formData.get("remove_cover") === "on";
-  if (hasFile(cover) || removeCover) {
-    const { data: old } = await supabase.from("sections").select("cover_url").eq("id", id).single();
-    update.cover_url = hasFile(cover) ? await upload(supabase, cover, "covers") : null;
-    if (old?.cover_url && !old.cover_url.startsWith("http")) {
-      await supabase.storage.from("media").remove([old.cover_url]);
-    }
+  let oldCover: string | null | undefined;
+  if (hasFile(cover) || formData.get("remove_cover") === "on") {
+    oldCover = (await prisma.section.findUnique({ where: { id }, select: { coverUrl: true } }))?.coverUrl;
+    data.coverUrl = hasFile(cover) ? await upload(cover, "covers") : null;
   }
 
-  const { error } = await supabase.from("sections").update(update).eq("id", id);
-  if (error) throw new Error(error.message);
+  await prisma.section.update({ where: { id }, data });
+  await deleteFiles([oldCover]);
   revalidatePath("/", "layout");
 }
 
 export async function addDecorations(formData: FormData) {
-  const supabase = await requireAdmin();
+  await requireAdmin();
   const id = String(formData.get("id"));
   const files = formData.getAll("files").filter(hasFile);
   if (!files.length) return;
 
-  const { data: section, error: readError } = await supabase
-    .from("sections").select("decorations").eq("id", id).single();
-  if (readError) throw new Error(readError.message);
-
   const added: string[] = [];
-  for (const f of files) added.push(await upload(supabase, f, "decorations"));
+  for (const f of files) added.push(await upload(f, "decorations"));
 
-  const { error } = await supabase
-    .from("sections")
-    .update({ decorations: [...(section?.decorations ?? []), ...added] })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
+  await prisma.section.update({ where: { id }, data: { decorations: { push: added } } });
   revalidatePath("/", "layout");
 }
 
 export async function removeDecoration(formData: FormData) {
-  const supabase = await requireAdmin();
+  await requireAdmin();
   const id = String(formData.get("id"));
   const path = String(formData.get("path"));
-  const { data: section } = await supabase.from("sections").select("decorations").eq("id", id).single();
-  const rest = (section?.decorations ?? []).filter((p: string) => p !== path);
-  await supabase.from("sections").update({ decorations: rest }).eq("id", id);
-  if (path.startsWith("decorations/")) await supabase.storage.from("media").remove([path]);
+  const section = await prisma.section.findUnique({ where: { id }, select: { decorations: true } });
+  if (!section) return;
+  await prisma.section.update({
+    where: { id },
+    data: { decorations: section.decorations.filter((p) => p !== path) },
+  });
+  if (path.startsWith("decorations/")) await deleteFiles([path]);
   revalidatePath("/", "layout");
 }
 
 export async function deleteSection(formData: FormData) {
-  const supabase = await requireAdmin();
-  await supabase.from("sections").delete().eq("id", String(formData.get("id")));
+  await requireAdmin();
+  await prisma.section.delete({ where: { id: String(formData.get("id")) } });
   revalidatePath("/", "layout");
 }
 
@@ -137,226 +115,220 @@ function parseVocabulary(raw: FormDataEntryValue | null) {
 }
 
 const parseLyrics = (raw: FormDataEntryValue | null) => String(raw ?? "").trim() || null;
+const connectIds = (ids: string[]) => ids.map((id) => ({ id }));
 
-export async function createItem(formData: FormData) {
-  const supabase = await requireAdmin();
-  const sectionId = String(formData.get("section_id"));
-  const cover = formData.get("cover");
-  const links = parseLinks(formData.get("links"));
-  const { count } = await supabase
-    .from("items").select("*", { count: "exact", head: true }).eq("section_id", sectionId);
-
-  const { data: item, error } = await supabase
-    .from("items")
-    .insert({
-      section_id: sectionId,
-      position: count ?? 0, // los ítems nuevos van al final
-      title: String(formData.get("title")),
-      body: String(formData.get("body") ?? ""),
-      links,
-      vocabulary: parseVocabulary(formData.get("vocabulary")),
-      lyrics: parseLyrics(formData.get("lyrics")),
-      cover_url: hasFile(cover) ? await upload(supabase, cover, "covers") : null,
-      published: formData.get("published") === "on",
-    })
-    .select("id")
-    .single();
-  if (error || !item) throw new Error(error?.message ?? "No se pudo crear el ítem");
-
-  const levelIds = formData.getAll("levels").map(String);
-  const genreIds = formData.getAll("genres").map(String);
-  if (levelIds.length)
-    await supabase.from("item_levels").insert(levelIds.map((level_id) => ({ item_id: item.id, level_id })));
-  if (genreIds.length)
-    await supabase.from("item_genres").insert(genreIds.map((genre_id) => ({ item_id: item.id, genre_id })));
-
+async function uploadAttachments(itemId: string, formData: FormData) {
   for (const f of formData.getAll("files")) {
     if (!hasFile(f)) continue;
-    await supabase.from("attachments").insert({
-      item_id: item.id,
-      file_url: await upload(supabase, f, "files"),
-      name: f.name,
-      type: f.type === "application/pdf" ? "pdf" : "image",
+    await prisma.attachment.create({
+      data: { itemId, fileUrl: await upload(f, "files"), name: f.name, type: attachmentType(f) },
     });
   }
+}
+
+export async function createItem(formData: FormData) {
+  await requireAdmin();
+  const sectionId = String(formData.get("section_id"));
+  const cover = formData.get("cover");
+
+  const item = await prisma.item.create({
+    data: {
+      sectionId,
+      position: await prisma.item.count({ where: { sectionId } }), // los ítems nuevos van al final
+      title: String(formData.get("title")),
+      body: String(formData.get("body") ?? ""),
+      links: parseLinks(formData.get("links")),
+      vocabulary: parseVocabulary(formData.get("vocabulary")),
+      lyrics: parseLyrics(formData.get("lyrics")),
+      coverUrl: hasFile(cover) ? await upload(cover, "covers") : null,
+      published: formData.get("published") === "on",
+      levels: { connect: connectIds(formData.getAll("levels").map(String)) },
+      genres: { connect: connectIds(formData.getAll("genres").map(String)) },
+    },
+    select: { id: true },
+  });
+
+  await uploadAttachments(item.id, formData);
   revalidatePath("/", "layout");
   redirect(`/admin/sections/${sectionId}`);
 }
 
 export async function togglePublished(formData: FormData) {
-  const supabase = await requireAdmin();
-  await supabase
-    .from("items")
-    .update({ published: formData.get("published") !== "true" })
-    .eq("id", String(formData.get("id")));
+  await requireAdmin();
+  await prisma.item.update({
+    where: { id: String(formData.get("id")) },
+    data: { published: formData.get("published") !== "true" },
+  });
   revalidatePath("/", "layout");
 }
 
 export async function deleteItem(formData: FormData) {
-  const supabase = await requireAdmin();
-  await supabase.from("items").delete().eq("id", String(formData.get("id")));
+  await requireAdmin();
+  await prisma.item.delete({ where: { id: String(formData.get("id")) } });
   revalidatePath("/", "layout");
 }
 
 export async function createGenre(formData: FormData) {
-  const supabase = await requireAdmin();
-  await supabase.from("genres").insert({ name: String(formData.get("name")).trim() });
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  if (name) await prisma.genre.upsert({ where: { name }, update: {}, create: { name } });
   revalidatePath("/admin", "layout");
 }
 
 export type StudentState = { error?: string; ok?: string } | undefined;
 
+// Guarda (o reemplaza) la contraseña de un usuario como cuenta "credential" de Better Auth.
+async function setCredentialPassword(userId: string, password: string) {
+  const hashed = await hashPassword(password);
+  const existing = await prisma.account.findFirst({ where: { userId, providerId: "credential" } });
+  if (existing) {
+    await prisma.account.update({ where: { id: existing.id }, data: { password: hashed } });
+  } else {
+    await prisma.account.create({
+      data: { userId, accountId: userId, providerId: "credential", password: hashed },
+    });
+  }
+}
+
+// Registra al alumno con su Gmail y una contraseña inicial. Puede entrar con email + contraseña
+// o con Google (la primera vez con Google se une a este mismo registro).
 export async function createStudent(_: StudentState, formData: FormData): Promise<StudentState> {
   await requireAdmin();
-  const email = String(formData.get("email") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const name = String(formData.get("name") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  if (!email) return { error: "Escribe el email." };
+  if (password.length < 8) return { error: "La contraseña debe tener al menos 8 caracteres." };
 
-  // Envía el correo de invitación; el alumno crea su propia contraseña.
-  const { error } = await createAdminClient().auth.admin.inviteUserByEmail(email, {
-    data: { name },
+  if (await prisma.user.findUnique({ where: { email } })) {
+    return { error: "Ese email ya está registrado." };
+  }
+  const user = await prisma.user.create({
+    data: { email, name: name || email.split("@")[0], role: "student" },
   });
-  if (error) return { error: error.message };
+  await setCredentialPassword(user.id, password);
   revalidatePath("/admin/students");
-  return { ok: `Invitación enviada a ${email}. Podrá crear su contraseña desde el correo.` };
+  return { ok: `Listo: ${email} ya puede entrar con su contraseña o con Google.` };
+}
+
+export async function resetStudentPassword(_: StudentState, formData: FormData): Promise<StudentState> {
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8) return { error: "Mínimo 8 caracteres." };
+  const student = await prisma.user.findFirst({ where: { id, role: "student" }, select: { id: true } });
+  if (!student) return { error: "Alumno no encontrado." };
+  await setCredentialPassword(id, password);
+  await prisma.session.deleteMany({ where: { userId: id } }); // cierra sus sesiones abiertas
+  return { ok: "Contraseña actualizada." };
 }
 
 export async function toggleStudentActive(formData: FormData) {
-  const supabase = await requireAdmin();
-  await supabase
-    .from("profiles")
-    .update({ active: formData.get("active") !== "true" })
-    .eq("id", String(formData.get("id")))
-    .eq("role", "student");
+  await requireAdmin();
+  await prisma.user.updateMany({
+    where: { id: String(formData.get("id")), role: "student" },
+    data: { active: formData.get("active") !== "true" },
+  });
   revalidatePath("/admin/students");
 }
 
 export async function deleteStudent(formData: FormData) {
-  const supabase = await requireAdmin();
-  const id = String(formData.get("id"));
-  const { data } = await supabase.from("profiles").select("role").eq("id", id).single();
-  if (data?.role !== "student") return;
-  await createAdminClient().auth.admin.deleteUser(id);
+  await requireAdmin();
+  // Las sesiones y cuentas se borran en cascada.
+  await prisma.user.deleteMany({ where: { id: String(formData.get("id")), role: "student" } });
   revalidatePath("/admin/students");
 }
 
-// El navegador sube el PNG directo a Storage; aquí solo se registra en la base de datos.
-export async function saveWhiteboard(itemId: string, path: string, name: string) {
-  const supabase = await requireAdmin();
-  if (!path.startsWith("whiteboards/")) return { error: "Ruta de archivo no válida." };
-  const { error } = await supabase.from("attachments").insert({
-    item_id: itemId,
-    file_url: path,
-    name: name.trim() || "Pizarra",
-    type: "image",
-  });
-  if (error) return { error: error.message };
+// La pizarra se dibuja en el navegador y llega como PNG; se sube a R2 y se registra en el ítem.
+export async function saveWhiteboard(formData: FormData) {
+  await requireAdmin();
+  const itemId = String(formData.get("item_id"));
+  const image = formData.get("image");
+  const name = String(formData.get("name") ?? "").trim() || "Pizarra";
+  if (!(image instanceof Blob) || image.size === 0 || image.type !== "image/png") {
+    return { error: "Imagen no válida." };
+  }
+  if (!(await prisma.item.findUnique({ where: { id: itemId }, select: { id: true } }))) {
+    return { error: "El ítem ya no existe." };
+  }
+
+  const fileUrl = await uploadFile(image, "whiteboards", `${name}.png`);
+  await prisma.attachment.create({ data: { itemId, fileUrl, name: `${name}.png`, type: "image" } });
   revalidatePath("/", "layout");
   return { ok: true as const };
 }
 
 export async function updateItem(formData: FormData) {
-  const supabase = await requireAdmin();
+  await requireAdmin();
   const id = String(formData.get("id"));
   const title = String(formData.get("title") ?? "").trim();
   if (!title) throw new Error("El ítem necesita un título.");
 
-  const { data: current, error: readError } = await supabase
-    .from("items").select("section_id,cover_url").eq("id", id).single();
-  if (readError || !current) throw new Error(readError?.message ?? "Ítem no encontrado");
+  const current = await prisma.item.findUnique({ where: { id }, select: { sectionId: true, coverUrl: true } });
+  if (!current) throw new Error("Ítem no encontrado");
 
-  const update: {
-    title: string; body: string; links: { label: string; url: string }[];
-    vocabulary: ReturnType<typeof parseVocabulary>; lyrics: string | null;
-    published: boolean; cover_url?: string | null;
-  } = {
-    title,
-    body: String(formData.get("body") ?? ""),
-    links: parseLinks(formData.get("links")),
-    vocabulary: parseVocabulary(formData.get("vocabulary")),
-    lyrics: parseLyrics(formData.get("lyrics")),
-    published: formData.get("published") === "on",
-  };
-
+  const data: {
+    coverUrl?: string | null;
+  } = {};
   const cover = formData.get("cover");
+  let oldCover: string | null = null;
   if (hasFile(cover) || formData.get("remove_cover") === "on") {
-    update.cover_url = hasFile(cover) ? await upload(supabase, cover, "covers") : null;
-    if (current.cover_url && !current.cover_url.startsWith("http")) {
-      await supabase.storage.from("media").remove([current.cover_url]);
-    }
+    data.coverUrl = hasFile(cover) ? await upload(cover, "covers") : null;
+    oldCover = current.coverUrl;
   }
 
-  const { error } = await supabase.from("items").update(update).eq("id", id);
-  if (error) throw new Error(error.message);
+  await prisma.item.update({
+    where: { id },
+    data: {
+      ...data,
+      title,
+      body: String(formData.get("body") ?? ""),
+      links: parseLinks(formData.get("links")),
+      vocabulary: parseVocabulary(formData.get("vocabulary")),
+      lyrics: parseLyrics(formData.get("lyrics")),
+      published: formData.get("published") === "on",
+      // Niveles y géneros: se reemplazan por la selección actual.
+      levels: { set: connectIds(formData.getAll("levels").map(String)) },
+      genres: { set: connectIds(formData.getAll("genres").map(String)) },
+    },
+  });
+  await deleteFiles([oldCover]);
 
-  // Niveles y géneros: se reemplazan por la selección actual.
-  const levelIds = formData.getAll("levels").map(String);
-  const genreIds = formData.getAll("genres").map(String);
-  await supabase.from("item_levels").delete().eq("item_id", id);
-  await supabase.from("item_genres").delete().eq("item_id", id);
-  if (levelIds.length)
-    await supabase.from("item_levels").insert(levelIds.map((level_id) => ({ item_id: id, level_id })));
-  if (genreIds.length)
-    await supabase.from("item_genres").insert(genreIds.map((genre_id) => ({ item_id: id, genre_id })));
-
-  for (const f of formData.getAll("files")) {
-    if (!hasFile(f)) continue;
-    await supabase.from("attachments").insert({
-      item_id: id,
-      file_url: await upload(supabase, f, "files"),
-      name: f.name,
-      type: f.type === "application/pdf" ? "pdf" : "image",
-    });
-  }
+  await uploadAttachments(id, formData);
   revalidatePath("/", "layout");
-  redirect(`/admin/sections/${current.section_id}`);
+  redirect(`/admin/sections/${current.sectionId}`);
 }
 
 export async function removeAttachment(formData: FormData) {
-  const supabase = await requireAdmin();
+  await requireAdmin();
   const id = String(formData.get("id"));
-  const { data: att } = await supabase.from("attachments").select("file_url").eq("id", id).single();
-  await supabase.from("attachments").delete().eq("id", id);
-  if (att?.file_url && !att.file_url.startsWith("http")) {
-    await supabase.storage.from("media").remove([att.file_url]);
-  }
+  const att = await prisma.attachment.findUnique({ where: { id }, select: { fileUrl: true } });
+  if (!att) return;
+  await prisma.attachment.delete({ where: { id } });
+  await deleteFiles([att.fileUrl]);
   revalidatePath("/", "layout");
 }
 
 export async function moveItem(formData: FormData) {
-  const supabase = await requireAdmin();
+  await requireAdmin();
   const id = String(formData.get("id"));
   const sectionId = String(formData.get("section_id"));
   const dir = formData.get("dir") === "up" ? -1 : 1;
 
-  const { data: rows } = await supabase
-    .from("items").select("id").eq("section_id", sectionId)
-    .order("position").order("created_at");
-  const ids = (rows ?? []).map((r) => r.id);
+  const rows = await prisma.item.findMany({
+    where: { sectionId },
+    select: { id: true },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+  });
+  const ids = rows.map((r) => r.id);
   const i = ids.indexOf(id);
   const j = i + dir;
   if (i < 0 || j < 0 || j >= ids.length) return;
   [ids[i], ids[j]] = [ids[j], ids[i]];
 
   // Se renumera todo para que no queden empates.
-  await Promise.all(ids.map((rid, position) => supabase.from("items").update({ position }).eq("id", rid)));
+  await prisma.$transaction(
+    ids.map((rid, position) => prisma.item.update({ where: { id: rid }, data: { position } }))
+  );
   revalidatePath("/", "layout");
-}
-
-export type ResetState = { error?: string; ok?: string } | undefined;
-
-// El alumno recibe un correo y crea él mismo su nueva contraseña.
-export async function resetStudentPassword(_: ResetState, formData: FormData): Promise<ResetState> {
-  await requireAdmin();
-  const id = String(formData.get("id"));
-  const { data, error } = await createAdminClient().auth.admin.getUserById(id);
-  const email = data?.user?.email;
-  if (error || !email) return { error: "No se encontró el email de este alumno." };
-
-  const h = await headers();
-  const origin = h.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  const { error: sendError } = await createPublicClient().auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/login`,
-  });
-  if (sendError) return { error: sendError.message };
-  return { ok: `Enviamos un enlace a ${email}.` };
 }

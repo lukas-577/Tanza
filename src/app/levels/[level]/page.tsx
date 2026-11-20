@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/session";
 import { Header } from "@/components/Header";
 import { LevelChip, GenreChip } from "@/components/Chip";
 import { levelInfo } from "@/lib/links";
@@ -8,18 +9,20 @@ import { levelInfo } from "@/lib/links";
 export default async function LevelPage({ params }: { params: Promise<{ level: string }> }) {
   const { level: raw } = await params;
   const level = decodeURIComponent(raw);
-  const supabase = await createClient();
+  const profile = await requireUser();
 
-  const { data: items } = await supabase
-    .from("items")
-    .select("id,title,sections(id,title,position),item_levels!inner(levels!inner(name)),item_genres(genres(id,name))")
-    .eq("item_levels.levels.name", level)
-    .order("position").order("created_at");
+  const items = await prisma.item.findMany({
+    where: {
+      levels: { some: { name: level } },
+      ...(profile.role === "admin" ? {} : { published: true }),
+    },
+    select: { id: true, title: true, section: true, genres: true },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+  });
 
-  const groups = new Map<string, { title: string; position: number; items: any[] }>();
-  (items as any[] | null)?.forEach((it) => {
-    const s = it.sections;
-    if (!s) return;
+  const groups = new Map<string, { title: string; position: number; items: typeof items }>();
+  items.forEach((it) => {
+    const s = it.section;
     if (!groups.has(s.id)) groups.set(s.id, { title: s.title, position: s.position, items: [] });
     groups.get(s.id)!.items.push(it);
   });
@@ -49,7 +52,7 @@ export default async function LevelPage({ params }: { params: Promise<{ level: s
                         className="flex flex-wrap items-center justify-between gap-2 px-2 py-3.5 hover:bg-sky/40">
                         <span className="font-medium">{it.title}</span>
                         <span className="flex items-center gap-1.5">
-                          {it.item_genres.map((x: any) => x.genres && <GenreChip key={x.genres.id} name={x.genres.name} />)}
+                          {it.genres.map((g) => <GenreChip key={g.id} name={g.name} />)}
                           <LevelChip name={level} />
                         </span>
                       </Link>

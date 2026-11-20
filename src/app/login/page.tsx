@@ -1,41 +1,39 @@
-"use client";
+import { redirect } from "next/navigation";
+import { getProfile } from "@/lib/session";
+import { GoogleButton } from "./GoogleButton";
+import { EmailForm } from "./EmailForm";
 
-import { useActionState } from "react";
-import Link from "next/link";
-import { signIn } from "./actions";
-import { HashSession } from "./HashSession";
+const messages: Record<string, string> = {
+  inactive: "Tu cuenta está desactivada. Habla con tu profesora.",
+  not_registered: "Ese correo de Google no está registrado. Pídele a tu profesora que te agregue.",
+};
 
-export default function LoginPage() {
-  const [state, action, pending] = useActionState(signIn, undefined);
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
+  const profile = await getProfile();
+  if (profile?.active) redirect("/");
+
+  const message = error
+    ? messages[error] ??
+      "No pudimos iniciar sesión con Google. Revisa que uses el correo que te registró tu profesora."
+    : null;
+
   return (
     <main className="flex-1">
-      <HashSession />
       <div className="sky h-40" aria-hidden />
       <div className="mx-auto -mt-10 w-full max-w-sm px-4">
         <span className="text-5xl" aria-hidden>🎧</span>
         <h1 className="mt-2 text-3xl">The Tanza Teaching Experience</h1>
         <p className="mt-3 font-hand text-3xl">Welcome back!</p>
-        <p className="mt-2 text-ink-soft">Entra con el email que te dio tu profesora.</p>
-        <form action={action} className="mt-8 space-y-4">
-          <label className="block">
-            <span className="text-sm text-ink-soft">Email</span>
-            <input name="email" type="email" required autoComplete="email"
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2" />
-          </label>
-          <label className="block">
-            <span className="text-sm text-ink-soft">Contraseña</span>
-            <input name="password" type="password" required autoComplete="current-password"
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2" />
-          </label>
-          {state?.error && <p role="alert" className="text-sm text-red-700">{state.error}</p>}
-          <button disabled={pending}
-            className="w-full rounded-md bg-ink px-4 py-2 font-medium text-white disabled:opacity-60">
-            {pending ? "Entrando…" : "Entrar"}
-          </button>
-        </form>
-        <p className="mt-6 text-sm">
-          <Link href="/login/forgot" className="text-ink-soft hover:text-ink">¿Olvidaste tu contraseña?</Link>
-        </p>
+        <p className="mt-2 text-ink-soft">Entra con el email que le diste a tu profesora.</p>
+        <div className="mt-8 space-y-4">
+          {message && <p role="alert" className="text-sm text-red-700">{message}</p>}
+          <EmailForm />
+          <p className="flex items-center gap-3 text-sm text-ink-soft" aria-hidden>
+            <span className="h-px flex-1 bg-line" /> o <span className="h-px flex-1 bg-line" />
+          </p>
+          <GoogleButton />
+        </div>
       </div>
     </main>
   );

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/db";
 import { Whiteboard } from "./Whiteboard";
 
 export default async function WhiteboardPage({
@@ -8,16 +8,12 @@ export default async function WhiteboardPage({
   searchParams: Promise<{ item?: string }>;
 }) {
   const { item } = await searchParams;
-  const supabase = await createClient();
-  const { data: items } = await supabase
-    .from("items")
-    .select("id,title,sections(title)")
-    .order("created_at", { ascending: false });
+  const items = await prisma.item.findMany({
+    select: { id: true, title: true, section: { select: { title: true } } },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const options = (items ?? []).map((it: any) => ({
-    id: it.id as string,
-    label: `${it.sections?.title ?? "Sin sección"} · ${it.title}`,
-  }));
+  const options = items.map((it) => ({ id: it.id, label: `${it.section.title} · ${it.title}` }));
 
   return (
     <div className="space-y-6">

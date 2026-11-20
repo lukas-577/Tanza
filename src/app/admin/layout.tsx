@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
-import { getProfile } from "@/lib/data";
+import { requireAdmin } from "@/lib/session";
 import { Header } from "@/components/Header";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const profile = await getProfile();
-  if (profile?.role !== "admin") redirect("/");
+  await requireAdmin();
   return (
     <>
       <Header />

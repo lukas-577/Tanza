@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/session";
 import { signPaths } from "@/lib/data";
 import { Header } from "@/components/Header";
 import { LevelChip, GenreChip } from "@/components/Chip";
@@ -13,23 +14,23 @@ type Props = {
 export default async function SectionPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { nivel, q } = await searchParams;
-  const supabase = await createClient();
+  const profile = await requireUser();
+  const visible = profile.role === "admin" ? {} : { published: true };
 
-  const [{ data: section }, { data: levels }, { data: items }] = await Promise.all([
-    supabase.from("sections").select("*").eq("id", id).single(),
-    supabase.from("levels").select("*").order("position"),
-    supabase
-      .from("items")
-      .select("id,title,item_levels(levels(id,name,position)),item_genres(genres(id,name))")
-      .eq("section_id", id)
-      .order("position").order("created_at"),
+  const [section, levels, items] = await Promise.all([
+    prisma.section.findUnique({ where: { id } }),
+    prisma.level.findMany({ orderBy: { position: "asc" } }),
+    prisma.item.findMany({
+      where: { sectionId: id, ...visible },
+      select: { id: true, title: true, levels: { orderBy: { position: "asc" } }, genres: true },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    }),
   ]);
   if (!section) notFound();
-  const cover = (await signPaths([section.cover_url]))(section.cover_url);
+  const cover = (await signPaths([section.coverUrl]))(section.coverUrl);
 
-  const filtered = (items ?? []).filter((it) => {
-    const lv = it.item_levels.map((x: any) => x.levels?.name);
-    if (nivel && !lv.includes(nivel)) return false;
+  const filtered = items.filter((it) => {
+    if (nivel && !it.levels.some((l) => l.name === nivel)) return false;
     if (q && !it.title.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   });
@@ -52,7 +53,7 @@ export default async function SectionPage({ params, searchParams }: Props) {
 
         <div className="mt-8 flex flex-wrap items-center gap-2">
           <Link href={q ? `?q=${q}` : "?"} className={pill(!nivel)}>Todos</Link>
-          {levels?.map((l) => (
+          {levels.map((l) => (
             <Link key={l.id} href={`?nivel=${l.name}${q ? `&q=${q}` : ""}`} className={pill(nivel === l.name)}>
               {l.name}
             </Link>
@@ -74,12 +75,8 @@ export default async function SectionPage({ params, searchParams }: Props) {
                   className="flex flex-wrap items-center justify-between gap-2 px-2 py-3.5 hover:bg-sky/40">
                   <span className="font-medium">{it.title}</span>
                   <span className="flex flex-wrap items-center gap-1.5">
-                    {it.item_genres.map((g: any) => g.genres && <GenreChip key={g.genres.id} name={g.genres.name} />)}
-                    {it.item_levels
-                      .map((l: any) => l.levels)
-                      .filter(Boolean)
-                      .sort((a: any, b: any) => a.position - b.position)
-                      .map((l: any) => <LevelChip key={l.id} name={l.name} />)}
+                    {it.genres.map((g) => <GenreChip key={g.id} name={g.name} />)}
+                    {it.levels.map((l) => <LevelChip key={l.id} name={l.name} />)}
                   </span>
                 </Link>
               </li>

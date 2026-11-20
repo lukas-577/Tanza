@@ -1,41 +1,37 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { getProfile, signPaths } from "@/lib/data";
+import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/session";
+import { signPaths } from "@/lib/data";
 import { Header } from "@/components/Header";
 import { LevelPath } from "@/components/LevelPath";
 
 const tilts = ["-1.6deg", "1.2deg", "-0.8deg", "1.8deg"];
 
-type ListItem = {
-  id: string;
-  title: string;
-  body: string | null;
-  links: { label: string; url: string }[] | null;
-  section_id: string;
-  attachments: { id: string }[];
-};
-
 export default async function Home() {
-  const supabase = await createClient();
-  const [profile, { data: sections }, { data: levels }] = await Promise.all([
-    getProfile(),
-    supabase.from("sections").select("*").order("position"),
-    supabase.from("levels").select("name").order("position"),
+  const profile = await requireUser();
+  // Los alumnos solo ven ítems publicados; las admins ven todo.
+  const visible = profile.role === "admin" ? {} : { published: true };
+  const [sections, levels] = await Promise.all([
+    prisma.section.findMany({ orderBy: { position: "asc" } }),
+    prisma.level.findMany({ select: { name: true }, orderBy: { position: "asc" } }),
   ]);
 
   // Con portada: polaroid. Sin portada: lista de ítems directamente en la página.
-  const gallery = sections?.filter((s) => s.cover_url) ?? [];
-  const lists = sections?.filter((s) => !s.cover_url) ?? [];
+  const gallery = sections.filter((s) => s.coverUrl);
+  const lists = sections.filter((s) => !s.coverUrl);
 
-  const [url, { data: listItems }] = await Promise.all([
-    signPaths([...gallery.map((s) => s.cover_url), ...lists.flatMap((s) => s.decorations ?? [])]),
+  const [url, listItems] = await Promise.all([
+    signPaths([...gallery.map((s) => s.coverUrl), ...lists.flatMap((s) => s.decorations)]),
     lists.length
-      ? supabase
-          .from("items")
-          .select("id,title,body,links,section_id,attachments(id)")
-          .in("section_id", lists.map((s) => s.id))
-          .order("position").order("created_at")
-      : Promise.resolve({ data: [] as ListItem[] }),
+      ? prisma.item.findMany({
+          where: { sectionId: { in: lists.map((s) => s.id) }, ...visible },
+          select: {
+            id: true, title: true, body: true, links: true, sectionId: true,
+            _count: { select: { attachments: true } },
+          },
+          orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+        })
+      : Promise.resolve([]),
   ]);
 
   const first = profile?.name?.trim().split(" ")[0];
@@ -52,13 +48,13 @@ export default async function Home() {
         <div className="mt-10 grid gap-10 lg:grid-cols-[13rem_1fr]">
           <aside className="space-y-8">
             <div className="note max-w-[13rem] p-4 text-2xl leading-tight">always updating…</div>
-            <LevelPath levels={levels?.map((l) => l.name) ?? []} />
+            <LevelPath levels={levels.map((l) => l.name)} />
           </aside>
 
           <div className="space-y-14">
             <section>
               <h2 className="text-2xl"><span className="marker">Material</span></h2>
-              {!sections?.length ? (
+              {!sections.length ? (
                 <p className="mt-6 text-ink-soft">
                   Todavía no hay material. Tu profesora lo irá subiendo pronto.
                 </p>
@@ -71,7 +67,7 @@ export default async function Home() {
                           <div className="polaroid" style={{ "--tilt": tilts[i % tilts.length] } as React.CSSProperties}>
                             <div className="aspect-[4/3] overflow-hidden bg-sky">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={url(s.cover_url) ?? ""} alt="" className="h-full w-full object-cover" />
+                              <img src={url(s.coverUrl) ?? ""} alt="" className="h-full w-full object-cover" />
                             </div>
                             <p className="mt-2 text-center font-hand text-3xl leading-none">{s.title}</p>
                           </div>
@@ -84,8 +80,8 @@ export default async function Home() {
             </section>
 
             {lists.map((s) => {
-              const items = ((listItems ?? []) as ListItem[]).filter((it) => it.section_id === s.id);
-              const decorations: string[] = s.decorations ?? [];
+              const items = listItems.filter((it) => it.sectionId === s.id);
+              const decorations = s.decorations;
               return (
                 <section key={s.id} className="flex items-start gap-6">
                   <div className="min-w-0 flex-1">
@@ -100,12 +96,13 @@ export default async function Home() {
                     <ul className="ruled mt-4 border-b border-rule">
                       {items.map((it) => {
                         // Un ítem que es solo un enlace abre el sitio directamente.
-                        const only = it.links?.length === 1 && !it.body?.trim() && !it.attachments.length;
+                        const links = (it.links ?? []) as { label: string; url: string }[];
+                        const only = links.length === 1 && !it.body?.trim() && !it._count.attachments;
                         const className = "block px-2 py-3 hover:bg-sky/40";
                         return (
                           <li key={it.id}>
                             {only ? (
-                              <a href={it.links![0].url} target="_blank" rel="noopener noreferrer" className={className}>
+                              <a href={links[0].url} target="_blank" rel="noopener noreferrer" className={className}>
                                 {it.title}
                                 <span className="sr-only"> (se abre en otra pestaña)</span>
                               </a>

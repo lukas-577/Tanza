@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────── Better Auth (usuarios, sesiones y cuentas de Google) ─────────
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  // Reemplaza a la antigua tabla "profiles".
+  role          String    @default("student") // "admin" | "student"
+  active        Boolean   @default(true)
+  sessions      Session[]
+  accounts      Account[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ───────── Contenido ─────────
+
+model Section {
+  id          String   @id @default(uuid())
+  title       String
+  coverUrl    String? // clave del archivo en R2
+  icon        String?
+  position    Int      @default(0)
+  decorations String[] @default([]) // claves en R2
+  createdAt   DateTime @default(now())
+  items       Item[]
+
+  @@map("sections")
+}
+
+model Level {
+  id       String @id @default(uuid())
+  name     String @unique
+  color    String?
+  position Int    @default(0)
+  items    Item[]
+
+  @@map("levels")
+}
+
+model Genre {
+  id    String  @id @default(uuid())
+  name  String  @unique
+  color String?
+  items Item[]
+
+  @@map("genres")
+}
+
+model Item {
+  id          String       @id @default(uuid())
+  sectionId   String
+  section     Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  title       String
+  coverUrl    String? // clave en R2
+  body        String?
+  links       Json         @default("[]") // [{ label, url }]
+  vocabulary  Json         @default("[]") // [{ word, meaning, example }]
+  lyrics      String?
+  published   Boolean      @default(false)
+  position    Int          @default(0)
+  createdAt   DateTime     @default(now())
+  levels      Level[]
+  genres      Genre[]
+  attachments Attachment[]
+
+  @@index([sectionId])
+  @@map("items")
+}
+
+model Attachment {
+  id      String  @id @default(uuid())
+  itemId  String
+  item    Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fileUrl String // clave en R2
+  name    String?
+  type    String? // "pdf" | "image"
+
+  @@index([itemId])
+  @@map("attachments")
+}

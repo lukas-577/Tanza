@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { saveWhiteboard } from "../actions";
 
 type Tool = "pen" | "highlighter" | "eraser" | "text";
@@ -243,12 +242,11 @@ export function Whiteboard({ items, initialItemId }: { items: Option[]; initialI
       if (textBox) await commitText(); // no perder un texto a medio escribir
       const blob = await toBlob();
       if (!blob) throw new Error("No se pudo generar la imagen.");
-      const path = `whiteboards/${crypto.randomUUID()}.png`;
-      const { error } = await createClient()
-        .storage.from("media")
-        .upload(path, blob, { contentType: "image/png" });
-      if (error) throw new Error(error.message);
-      const res = await saveWhiteboard(itemId, path, `${name.trim() || "Pizarra"}.png`);
+      const form = new FormData();
+      form.set("item_id", itemId);
+      form.set("name", name.trim() || "Pizarra");
+      form.set("image", blob, "pizarra.png");
+      const res = await saveWhiteboard(form);
       if ("error" in res && res.error) throw new Error(res.error);
       setStatus({ kind: "ok", text: "Guardada. Ya aparece en el ítem para tus alumnos." });
     } catch (err) {

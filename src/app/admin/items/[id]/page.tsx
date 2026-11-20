@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/db";
 import { signPaths } from "@/lib/data";
 import { updateItem, removeAttachment } from "../../actions";
 import { ItemTeachingFields } from "../../ItemTeachingFields";
@@ -9,30 +9,33 @@ const field = "mt-1 w-full rounded-md border border-line bg-white px-3 py-2";
 
 export default async function EditItemPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const [{ data: item }, { data: levels }, { data: genres }] = await Promise.all([
-    supabase
-      .from("items")
-      .select("*,sections(id,title),item_levels(level_id),item_genres(genre_id),attachments(*)")
-      .eq("id", id)
-      .single(),
-    supabase.from("levels").select("*").order("position"),
-    supabase.from("genres").select("*").order("name"),
+  const [item, levels, genres] = await Promise.all([
+    prisma.item.findUnique({
+      where: { id },
+      include: {
+        section: true,
+        levels: { select: { id: true } },
+        genres: { select: { id: true } },
+        attachments: true,
+      },
+    }),
+    prisma.level.findMany({ orderBy: { position: "asc" } }),
+    prisma.genre.findMany({ orderBy: { name: "asc" } }),
   ]);
   if (!item) notFound();
 
-  const sign = await signPaths([item.cover_url, ...item.attachments.map((a: any) => a.file_url)]);
-  const cover = sign(item.cover_url);
-  const levelIds = new Set<string>(item.item_levels.map((x: any) => x.level_id));
-  const genreIds = new Set<string>(item.item_genres.map((x: any) => x.genre_id));
-  const links: { label: string; url: string }[] = item.links ?? [];
+  const sign = await signPaths([item.coverUrl, ...item.attachments.map((a) => a.fileUrl)]);
+  const cover = sign(item.coverUrl);
+  const levelIds = new Set(item.levels.map((x) => x.id));
+  const genreIds = new Set(item.genres.map((x) => x.id));
+  const links = item.links as { label: string; url: string }[];
   const linksText = links.map((l) => (l.label ? `${l.label} | ${l.url}` : l.url)).join("\n");
 
   return (
     <div className="space-y-8">
       <div>
-        <Link href={`/admin/sections/${item.sections.id}`} className="text-sm text-ink-soft hover:text-ink">
-          ← {item.sections.title}
+        <Link href={`/admin/sections/${item.section.id}`} className="text-sm text-ink-soft hover:text-ink">
+          ← {item.section.title}
         </Link>
         <h2 className="mt-2 text-3xl">Editar ítem</h2>
       </div>
@@ -41,9 +44,9 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
         <section className="space-y-2 rounded-lg border border-line p-4">
           <h3 className="text-lg">Archivos actuales</h3>
           <ul className="divide-y divide-line">
-            {item.attachments.map((a: any) => (
+            {item.attachments.map((a) => (
               <li key={a.id} className="flex items-center justify-between gap-3 py-2">
-                <a href={sign(a.file_url) ?? "#"} target="_blank" rel="noopener noreferrer"
+                <a href={sign(a.fileUrl) ?? "#"} target="_blank" rel="noopener noreferrer"
                   className="text-phones hover:underline">
                   {a.name ?? "archivo"}
                 </a>
@@ -69,7 +72,7 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
         <fieldset>
           <legend className="text-sm text-ink-soft">Niveles</legend>
           <div className="mt-1 flex flex-wrap gap-3">
-            {levels?.map((l) => (
+            {levels.map((l) => (
               <label key={l.id} className="flex items-center gap-1.5">
                 <input type="checkbox" name="levels" value={l.id} defaultChecked={levelIds.has(l.id)} /> {l.name}
               </label>
@@ -77,7 +80,7 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
           </div>
         </fieldset>
 
-        {!!genres?.length && (
+        {!!genres.length && (
           <fieldset>
             <legend className="text-sm text-ink-soft">Géneros</legend>
             <div className="mt-1 flex flex-wrap gap-3">
@@ -94,7 +97,7 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
           <textarea name="links" rows={3} defaultValue={linksText} className={field} />
         </label>
 
-        <ItemTeachingFields vocabulary={item.vocabulary ?? []} lyrics={item.lyrics} />
+        <ItemTeachingFields vocabulary={item.vocabulary as { word: string; meaning: string; example: string }[]} lyrics={item.lyrics} />
 
         <div className="flex items-end gap-4">
           {cover && (
@@ -122,7 +125,7 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
 
         <div className="flex items-center gap-4">
           <button className="rounded-md bg-ink px-4 py-2 font-medium text-white">Guardar cambios</button>
-          <Link href={`/admin/sections/${item.sections.id}`} className="text-sm text-ink-soft hover:text-ink">
+          <Link href={`/admin/sections/${item.section.id}`} className="text-sm text-ink-soft hover:text-ink">
             Cancelar
           </Link>
         </div>
